@@ -63,10 +63,22 @@ class AuthController extends Controller
     }
 
 
-    public function me()
+    // public function me()
+    // {
+    //     return response()->json($this->guard()->user());
+    // }
+
+    public function me(Request $request)
     {
-        return response()->json($this->guard()->user());
+        // Using the user attached by middleware
+        $user = $request->auth_user;
+
+        return response()->json([
+            'success' => true,
+            'user' => $user
+        ]);
     }
+
 
     public function logout()
     {
