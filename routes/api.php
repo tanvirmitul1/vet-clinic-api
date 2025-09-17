@@ -9,17 +9,18 @@ use App\Http\Controllers\Api\AuthController;
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    // Allow refresh without access token middleware; uses refresh_token cookie
+    Route::post('refresh', [AuthController::class, 'refresh']);
 });
 
 // --------------------
 // Protected Routes Group
 // --------------------
-Route::middleware('jwt.cookie', 'auth:api')->group(function () {
+Route::middleware('jwt.cookie')->group(function () {
 
     // Auth management
     Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
-        Route::post('refresh', [AuthController::class, 'refresh']);
         Route::get('me', [AuthController::class, 'me']);
     });
 
