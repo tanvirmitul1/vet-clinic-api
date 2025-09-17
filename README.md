@@ -1,61 +1,167 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+## Vet Clinic API Documentation
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This document describes the available REST endpoints, authentication, cookies/headers, and practical integration examples for a Next.js frontend.
 
-## About Laravel
+### Base URL
+- Replace `YOUR_DOMAIN` and port as appropriate.
+- Local development usually serves the API at `http://localhost:8000` (Laravel `php artisan serve`).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Base**: `http://YOUR_DOMAIN[:PORT]/api`
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### Authentication Overview
+- The API uses JWT-based auth with two tokens:
+  - **Access token**: short-lived, stored as an HTTP-only cookie named `jwt_access` (legacy: `access_token`).
+  - **Refresh token**: long-lived, stored as an HTTP-only cookie named `refresh_token`.
+- Middleware `jwt.cookie` authenticates protected endpoints by reading the `Authorization: Bearer <token>` header or, if absent, the `jwt_access` cookie (fallback to `access_token`).
+- Access token includes claim `type=access`. Refresh token includes claim `type=refresh`.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Cookie properties (per server response):
+- `httpOnly: true`, `secure: true` (use HTTPS in production), `sameSite: 'Strict'`.
 
-## Learning Laravel
+### Endpoints
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+#### POST /api/auth/register
+- **Description**: Register a new user.
+- **Body (JSON or form)**:
+  - `name` (string, required)
+  - `email` (string, required, unique)
+  - `password` (string, required, min 6)
+  - `password_confirmation` (string, must match password)
+- **Responses**:
+  - 201 Created
+    ```json
+    {
+      "success": true,
+      "message": "User registered successfully",
+      "user": { "id": 1, "name": "...", "email": "...", ... }
+    }
+    ```
+  - 422 Validation error
+    ```json
+    { "success": false, "message": "Validation errors", "errors": { ... } }
+    ```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+#### POST /api/auth/login
+- **Description**: Authenticate user and receive tokens.
+- **Body (JSON or form)**:
+  - `email` (string, required)
+  - `password` (string, required)
+- **Responses**:
+  - 200 OK, sets cookies `jwt_access`, `access_token` (legacy), and `refresh_token`.
+    ```json
+    {
+      "message": "Login successful",
+      "access_token": "<JWT>",
+      "expires_in": <seconds>,
+      "refresh_token": "<JWT>",
+      "refresh_expires_in": <seconds>
+    }
+    ```
+  - 401 Unauthorized: `{ "error": "Unauthorized" }`
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+#### POST /api/auth/refresh
+- **Description**: Issue a new access token using the `refresh_token` cookie.
+- **Auth**: No access token required. Requires `refresh_token` cookie with `type=refresh`.
+- **Responses**:
+  - 200 OK, sets new `jwt_access` (and legacy `access_token`) cookie.
+    ```json
+    { "access_token": "<JWT>", "token_type": "bearer", "expires_in": <seconds> }
+    ```
+  - 401 Unauthorized (missing/invalid/incorrect-type refresh token): `{ "error": "..." }`
 
-## Laravel Sponsors
+#### GET /api/auth/me
+- **Description**: Return the authenticated user.
+- **Auth**: Requires `jwt_access` cookie (or `Authorization: Bearer <access token>` header).
+- **Responses**:
+  - 200 OK
+    ```json
+    { "success": true, "user": { "id": 1, "name": "...", "email": "...", ... } }
+    ```
+  - 401 Unauthorized (no access token / invalid / refresh token used):
+    ```json
+    { "success": false, "message": "Unauthenticated" }
+    ```
+    or
+    ```json
+    { "success": false, "message": "Invalid token type: refresh token not allowed here" }
+    ```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+#### POST /api/auth/logout
+- **Description**: Invalidate the current access token and clear auth cookies.
+- **Auth**: Requires current access token (via header or cookie).
+- **Responses**:
+  - 200 OK: `{ "message": "Successfully logged out" }`
+  - 500 Internal error: `{ "error": "Failed to logout" }`
 
-### Premium Partners
+### Common Error Responses
+- 401 Unauthenticated
+  - `{ "success": false, "message": "Unauthenticated: no access token" }`
+  - `{ "success": false, "message": "Access token expired, please refresh" }`
+  - `{ "success": false, "message": "Access token invalid" }`
+  - `{ "success": false, "message": "Invalid token type: refresh token not allowed here" }`
+- 422 Validation errors
+- 500 Server errors
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### Integration Notes (Next.js)
 
-## Contributing
+Use `fetch` with `credentials: 'include'` so cookies are sent/received. Prefer HTTPS in production to satisfy `secure` cookies.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Example: login action (server action or client component)
+```ts
+// POST /api/auth/login
+await fetch(process.env.NEXT_PUBLIC_API_BASE + '/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include',
+  body: JSON.stringify({ email, password })
+});
+```
 
-## Code of Conduct
+Example: get current user
+```ts
+// GET /api/auth/me
+const res = await fetch(process.env.NEXT_PUBLIC_API_BASE + '/auth/me', {
+  method: 'GET',
+  credentials: 'include'
+});
+if (res.status === 401) {
+  // try refresh
+  const r = await fetch(process.env.NEXT_PUBLIC_API_BASE + '/auth/refresh', {
+    method: 'POST',
+    credentials: 'include'
+  });
+  if (r.ok) {
+    // retry me
+    return fetch(process.env.NEXT_PUBLIC_API_BASE + '/auth/me', {
+      credentials: 'include'
+    });
+  }
+}
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Optional: using Authorization header instead of cookie
+```ts
+const token = /* store access token from login if you want header-based auth */
+const res = await fetch(process.env.NEXT_PUBLIC_API_BASE + '/auth/me', {
+  headers: { Authorization: `Bearer ${token}` },
+  credentials: 'include' // keep for refresh flows/cookie sync
+});
+```
 
-## Security Vulnerabilities
+### CORS & Cookies
+- Ensure your Next.js origin is allowed in `config/cors.php` and that `supports_credentials` is enabled.
+- When using `secure` cookies locally, prefer `https://localhost` or set `secure` to `false` in non-HTTPS dev environments if necessary.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Notes & Conventions
+- All auth endpoints are under `/api/auth/*`.
+- Responses use JSON. Errors include simple `error` or `{ success: false, message }` shapes.
+- Legacy cookie `access_token` is currently also set for backward compatibility; prefer `jwt_access`.
 
-## License
+### Roadmap (placeholders)
+Migrations and models exist for domain resources (owners, pets, treatments, appointments, billing, roles), but routes/controllers are not exposed yet. Once added, extend this document with:
+- `GET/POST/PUT/DELETE` routes and bodies
+- Validation rules
+- Pagination & filtering patterns
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
