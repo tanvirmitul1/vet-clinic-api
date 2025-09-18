@@ -78,9 +78,10 @@ class AuthController extends Controller
                 'refresh_token' => $refreshToken,
                 'refresh_expires_in' => $refreshTtl * 60
             ])
-            ->cookie('jwt_access', $token, $accessTtl, '/', null, true, true, false, 'Strict')
-            ->cookie('access_token', $token, $accessTtl, '/', null, true, true, false, 'Strict')
-            ->cookie('refresh_token', $refreshToken, $refreshTtl, '/', null, true, true, false, 'Strict');
+            // SameSite=None requires Secure=true for cross-site cookies over HTTPS
+            ->cookie('jwt_access', $token, $accessTtl, '/', null, true, true, false, 'None')
+            ->cookie('access_token', $token, $accessTtl, '/', null, true, true, false, 'None')
+            ->cookie('refresh_token', $refreshToken, $refreshTtl, '/', null, true, true, false, 'None');
     }
 
     public function refresh(Request $request)
@@ -112,8 +113,8 @@ class AuthController extends Controller
                     'token_type'   => 'bearer',
                     'expires_in'   => JWTAuth::factory()->getTTL() * 60,
                 ])
-                ->cookie('jwt_access', $newAccessToken, JWTAuth::factory()->getTTL(), '/', null, true, true, false, 'Strict')
-                ->cookie('access_token', $newAccessToken, JWTAuth::factory()->getTTL(), '/', null, true, true, false, 'Strict');
+                ->cookie('jwt_access', $newAccessToken, JWTAuth::factory()->getTTL(), '/', null, true, true, false, 'None')
+                ->cookie('access_token', $newAccessToken, JWTAuth::factory()->getTTL(), '/', null, true, true, false, 'None');
         } catch (\Exception $e) {
             return response()->json(['error' => 'Refresh failed'], 401);
         }
