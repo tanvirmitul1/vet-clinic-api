@@ -12,6 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Ensure CORS runs globally for API and web
+        $middleware->append(\Illuminate\Http\Middleware\HandleCors::class);
         // 🔹 Add your middleware alias here
         $middleware->alias([
             'jwt.cookie' => \App\Http\Middleware\JwtFromCookie::class,
